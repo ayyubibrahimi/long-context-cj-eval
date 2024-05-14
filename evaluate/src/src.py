@@ -205,10 +205,16 @@ def main(llm_output_directory, groundtruth_directory):
                 print(f"Groundtruth file not found for {file_name}")
 
     results_df = pd.concat(results, ignore_index=True)
-    results_df.to_csv("../data/output/results_df.csv", index=False)
+    
+    # Extract the suffix from llm_output_directory
+    directory_suffix = os.path.basename(llm_output_directory).replace(" ", "_")
+    results_df_name = f"results_{directory_suffix}.csv"
+
+    # Save the results_df with the dynamic name
+    results_df.to_csv(f"../data/output/{results_df_name}", index=False)
     print(results_df)
 
 if __name__ == "__main__":
-    llm_output_directory = "../../model/data/output/"
+    llm_output_directory = "../../model/data/ner-20-pages"
     groundtruth_directory = "../data/input"
     main(llm_output_directory, groundtruth_directory)

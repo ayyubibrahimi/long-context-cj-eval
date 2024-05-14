@@ -83,7 +83,7 @@ class DocClient:
     def process(self, pdf_path):
         outname = os.path.basename(pdf_path).replace(".pdf", "")
         outstring = os.path.join(
-            "../../data/wrongful-convictions/pdfs/transcripts", "{}.json".format(outname)
+            "../data/output/transcripts", "{}.json".format(outname)
         )
         outpath = os.path.abspath(outstring)
 
@@ -148,10 +148,10 @@ if __name__ == "__main__":
     logger.setLevel(logging.INFO)
     azurelogger.setLevel(logging.ERROR)
 
-    doc_directory = "../../data/wrongful-convictions/pdfs/transcripts"
+    doc_directory = "../data/input/transcripts"
 
-    if not os.path.exists("../../data/wrongful-convictions/pdfs/transcripts"):
-        os.makedirs("../../data/wrongful-convictions/pdfs/transcripts")
+    if not os.path.exists("../data/input/transcripts"):
+        os.makedirs("../data/input/transcripts")
 
     endpoint, key = getcreds()
     client = DocClient(endpoint, key)

@@ -167,6 +167,6 @@ def process_query(input_path_transcripts, input_path_reports, output_path):
 if __name__ == "__main__":
     input_path_transcripts = r"../../ocr/data/output/transcripts"
     input_path_reports = r"../../ocr/data/output/reports"
-    output_path = r"../data/output/"
+    output_path = r"../data/output/all-pages"
 
     process_query(input_path_transcripts, input_path_reports, output_path)
