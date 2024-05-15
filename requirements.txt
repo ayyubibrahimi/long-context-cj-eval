@@ -1,0 +1,9 @@
+langchain-core
+langchain-openai
+langchain-community
+langchain-anthropic
+langchain
+tiktoken   
+dotenv
+spacy
+jellyfish

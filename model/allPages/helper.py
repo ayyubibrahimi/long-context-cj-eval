@@ -22,6 +22,7 @@ PROMPT_TEMPLATE_HYDE = PromptTemplate(
     Roles and Responses:""",
 )
 
+
 def generate_hypothetical_embeddings():
     llm = OpenAI()
     prompt = PROMPT_TEMPLATE_HYDE
@@ -36,14 +37,13 @@ def generate_hypothetical_embeddings():
     return embeddings
 
 
-
-
 def clean_name(officer_name):
     return re.sub(
         r"(Detective|Officer|[Dd]et\.|[Ss]gt\.|[Ll]t\.|[Cc]pt\.|[Oo]fc\.|Deputy|Captain|[CcPpLl]|Sergeant|Lieutenant|Techn?i?c?i?a?n?|Investigator|^-|\d{1}\)|\w{1}\.)\.?\s+",
         "",
         officer_name,
     )
+
 
 def extract_officer_data(text):
     officer_data = []
@@ -77,8 +77,6 @@ def extract_officer_data(text):
             officer_data.append(officer_dict)
 
     return officer_data
-
-
 
 
 def sort_retrived_documents(doc_list):
