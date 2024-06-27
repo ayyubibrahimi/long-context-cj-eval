@@ -128,11 +128,11 @@ if __name__ == "__main__":
 
     # Define models and processing types
     allContextModels = ["claude-3-5-sonnet-20240620", "claude-3-haiku-20240307", "claude-3-opus-20240229"]
-    allPagesModels = ["claude-3-haiku-20240307", "mistralai/Mistral-7B-Instruct-v0.3"]
-    nerModels = ["claude-3-haiku-20240307", "mistralai/Mistral-7B-Instruct-v0.3"]
+    allPagesModels = ["claude-3-haiku-20240307", "mistralai/Mixtral-8x22B-Instruct-v0.1"]
+    nerModels = ["claude-3-haiku-20240307", "mistralai/Mixtral-8x22B-Instruct-v0.1"]
     
     ### Mixtral-8x22B isn't working. Figure out why 
-    
+
     # allPagesModels = ["mistralai/Mixtral-8x22B", "meta-llama/Llama-3-70b-chat-hf", "Qwen/Qwen2-72B-Instruct"]
     # nerModels = ["mistralai/Mixtral-8x22B", "meta-llama/Llama-3-70b-chat-hf", "Qwen/Qwen2-72B-Instruct"]
 
