@@ -8,12 +8,10 @@ from io import BytesIO
 import time
 import logging
 
-
 def getcreds():
     with open("ocr/creds/creds_cv.txt", "r") as c:
         creds = c.readlines()
     return creds[0].strip(), creds[1].strip()
-
 
 def extract_content(result):
     contents = {}
@@ -28,7 +26,6 @@ def extract_content(result):
         contents[f"page_{read_result.page}"] = "\n".join(page_content)
 
     return contents
-
 
 def pdf2df(pdf_path, json_file, client):
     with open(pdf_path, "rb") as file:
@@ -69,32 +66,37 @@ def pdf2df(pdf_path, json_file, client):
                 logging.error(f"Error processing page {i+1} of file {pdf_path}: {e}")
                 continue
 
-
 def process(pdf_path, output_path):
     outname = os.path.basename(pdf_path).replace(".pdf", "")
     outstring = os.path.join(output_path, "{}.json".format(outname))
     outpath = os.path.abspath(outstring)
 
     if os.path.exists(outpath):
-        logging.info(f"skipping {outpath}, file already exists")
-        return outpath
+        with open(outpath, 'r') as f:
+            try:
+                existing_data = json.load(f)
+                if existing_data and 'messages' in existing_data and existing_data['messages']:
+                    logging.info(f"Skipping {outpath}, file already exists and contains data")
+                    return outpath
+            except json.JSONDecodeError:
+                pass
+        logging.info(f"File {outpath} exists but is empty or invalid. Reprocessing.")
 
-    logging.info(f"sending document {outname}")
-
-    with open(outpath, "w") as f:
-        f.write('{ "messages": {\n')
+    logging.info(f"Processing document {outname}")
 
     endpoint, key = getcreds()
     client = ComputerVisionClient(endpoint, CognitiveServicesCredentials(key))
+
+    with open(outpath, "w") as f:
+        f.write('{ "messages": {\n')
 
     pdf2df(pdf_path, outpath, client)
 
     with open(outpath, "a") as f:
         f.write("\n}}")
 
-    logging.info(f"finished writing to {outpath}")
+    logging.info(f"Finished writing to {outpath}")
     return outpath
-
 
 def update_page_keys_in_json(json_file):
     corrected_messages = {}
@@ -114,7 +116,6 @@ def update_page_keys_in_json(json_file):
     with open(json_file, "w") as f:
         json.dump({"messages": corrected_messages}, f, indent=4)
 
-
 def reformat_json_structure(json_file):
     with open(json_file, "r") as f:
         data = json.load(f)
@@ -128,7 +129,6 @@ def reformat_json_structure(json_file):
 
     with open(json_file, "w") as f:
         json.dump(new_data, f, indent=4)
-
 
 def ocr_process(
     input_path_transcripts,
@@ -147,30 +147,29 @@ def ocr_process(
     if not os.path.exists(output_path_reports):
         os.makedirs(output_path_reports)
 
-    files_transcripts = [
-        f
-        for f in os.listdir(input_path_transcripts)
-        if os.path.isfile(os.path.join(input_path_transcripts, f))
-        and f.lower().endswith(".pdf")
-    ]
-    logging.info(f"starting to process {len(files_transcripts)} transcript files")
-    for file in files_transcripts:
-        json_file_path = process(
-            os.path.join(input_path_transcripts, file), output_path_transcripts
-        )
-        update_page_keys_in_json(json_file_path)
-        reformat_json_structure(json_file_path)
+    def process_files(input_path, output_path):
+        files = [
+            f
+            for f in os.listdir(input_path)
+            if os.path.isfile(os.path.join(input_path, f))
+            and f.lower().endswith(".pdf")
+        ]
+        logging.info(f"Starting to process {len(files)} files from {input_path}")
+        for file in files:
+            json_file_path = process(
+                os.path.join(input_path, file), output_path
+            )
+            if os.path.exists(json_file_path):
+                with open(json_file_path, 'r') as f:
+                    try:
+                        data = json.load(f)
+                        if data and 'messages' in data and data['messages']:
+                            update_page_keys_in_json(json_file_path)
+                            reformat_json_structure(json_file_path)
+                        else:
+                            logging.warning(f"Skipping post-processing for {json_file_path} as it appears to be empty or invalid")
+                    except json.JSONDecodeError:
+                        logging.warning(f"Skipping post-processing for {json_file_path} as it contains invalid JSON")
 
-    files_reports = [
-        f
-        for f in os.listdir(input_path_reports)
-        if os.path.isfile(os.path.join(input_path_reports, f))
-        and f.lower().endswith(".pdf")
-    ]
-    logging.info(f"starting to process {len(files_reports)} report files")
-    for file in files_reports:
-        json_file_path = process(
-            os.path.join(input_path_reports, file), output_path_reports
-        )
-        update_page_keys_in_json(json_file_path)
-        reformat_json_structure(json_file_path)
+    process_files(input_path_transcripts, output_path_transcripts)
+    process_files(input_path_reports, output_path_reports)

@@ -78,17 +78,19 @@ def split_consolidated_names(name):
 
 def clean_llm_output_officer_names(df, title_patterns):
     logging.info("Cleaning LLM output officer names...")
+    
+    # Ensure all values in "Officer Name" column are strings
+    df["Officer Name"] = df["Officer Name"].astype(str).fillna("")
+    
     for pattern in title_patterns:
         df["Officer Name"] = (
             df["Officer Name"]
             .str.replace(pattern, "", flags=re.IGNORECASE, regex=True)
             .str.strip()
-            .fillna("")
             .apply(split_consolidated_names)
             .str.lower()
         )
     return df
-
 
 def clean_groundtruth_officer_names(df, title_patterns):
     logging.info("Cleaning groundtruth officer names...")
@@ -109,8 +111,23 @@ def preprocess_data(llm_output_path, groundtruth_path, title_patterns):
     logging.info(
         f"Preprocessing data for LLM output: {llm_output_path} and groundtruth: {groundtruth_path}"
     )
-    llm_output_df = pd.read_csv(llm_output_path)
-    groundtruth_df = pd.read_csv(groundtruth_path)
+    try:
+        llm_output_df = pd.read_csv(llm_output_path)
+        if llm_output_df.empty:
+            logging.warning(f"The LLM output file {llm_output_path} is empty. Creating default DataFrame.")
+            llm_output_df = pd.DataFrame(columns=["Officer Name"])
+    except pd.errors.EmptyDataError:
+        logging.warning(f"The LLM output file {llm_output_path} is empty. Creating default DataFrame.")
+        llm_output_df = pd.DataFrame(columns=["Officer Name"])
+
+    try:
+        groundtruth_df = pd.read_csv(groundtruth_path)
+        if groundtruth_df.empty:
+            logging.warning(f"The groundtruth file {groundtruth_path} is empty. Creating default DataFrame.")
+            groundtruth_df = pd.DataFrame(columns=["Officer Names to Match"])
+    except pd.errors.EmptyDataError:
+        logging.warning(f"The groundtruth file {groundtruth_path} is empty. Creating default DataFrame.")
+        groundtruth_df = pd.DataFrame(columns=["Officer Names to Match"])
 
     llm_output_df = clean_llm_output_officer_names(llm_output_df, title_patterns)
     groundtruth_df = clean_groundtruth_officer_names(groundtruth_df, title_patterns)

@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from dotenv import find_dotenv, load_dotenv
 import tiktoken
 from multiprocessing import Pool
+from langchain_together import ChatTogether
 
 load_dotenv(find_dotenv())
 
@@ -25,6 +26,26 @@ logger = logging.getLogger(__name__)
 TEMPERATURE = 0.7
 ITERATION_TIMES = 1
 MAX_RETRIES = 10
+
+
+REQUIRED_COLUMNS = [
+    "Officer Name", "page_number", "fn", "Query", 
+    "Prompt Template for Hyde", "Prompt Template for Model", 
+    "Temperature", "token_count", "file_type", "model"
+]
+DEFAULT_VALUES = {
+    "Officer Name": "",
+    "page_number": [],
+    "fn": "",
+    "Query": "",
+    "Prompt Template for Hyde": "",
+    "Prompt Template for Model": "",
+    "Temperature": 0.0,
+    "token_count": 0,
+    "file_type": "",
+    "model": ""
+}
+
 
 template = """
     As an AI assistant, my role is to meticulously analyze criminal justice documents and extract information about law enforcement personnel.
@@ -100,18 +121,15 @@ def get_response_from_query(db, query, temperature, model):
         return "", []
     docs = db
 
-    if model == "claude-3-sonnet-20240229":
+    if model == "claude-3-opus-20240229":
         llm = ChatAnthropic(model_name=model, temperature=temperature)
-    elif model == "claude-3-haiku-20240307":
+    elif model == "claude-3-5-sonnet-20240620":
         llm = ChatAnthropic(model_name=model, temperature=temperature)
-    elif model == "claude-3-opus-20240229":
-        llm = ChatAnthropic(model_name=model, temperature=temperature)
-    elif model == "gpt-4-0125-preview":
-        llm = ChatOpenAI(model_name=model, temperature=temperature)
-    elif model == "gpt-3.5-turbo-0125":
-        llm = ChatOpenAI(model_name=model, temperature=temperature)
+    elif model == "Qwen/Qwen2-72B-Instruct":
+        llm = ChatTogether(model_name=model, temperature=temperature)
     else:
         raise ValueError(f"Unsupported model: {model}")
+
 
     prompt_response = ChatPromptTemplate.from_template(template)
     response_chain = prompt_response | llm | StrOutputParser()
@@ -147,19 +165,33 @@ def process_file(args):
     )
     officer_data = extract_officer_data(officer_data_string)
 
-    for item in officer_data:
-        item["page_number"] = page_numbers
-        item["fn"] = file_name
-        item["Query"] = QUERY
-        item["Prompt Template for Hyde"] = PROMPT_TEMPLATE_HYDE
-        item["Prompt Template for Model"] = template
-        item["Temperature"] = TEMPERATURE
-        item["token_count"] = token_count
-        item["file_type"] = file_type
-        item["model"] = model
-    output_data.extend(officer_data)
+    if not officer_data:
+        # If no officers found, create a row with default values
+        default_row = {column: DEFAULT_VALUES[column] for column in REQUIRED_COLUMNS}
+        default_row["page_number"] = page_numbers
+        default_row["fn"] = file_name
+        default_row["Query"] = QUERY
+        default_row["Prompt Template for Hyde"] = PROMPT_TEMPLATE_HYDE
+        default_row["Prompt Template for Model"] = template
+        default_row["Temperature"] = TEMPERATURE
+        default_row["token_count"] = token_count
+        default_row["file_type"] = file_type
+        default_row["model"] = model
+        output_data.append(default_row)
+    else:
+        for item in officer_data:
+            item["page_number"] = page_numbers
+            item["fn"] = file_name
+            item["Query"] = QUERY
+            item["Prompt Template for Hyde"] = PROMPT_TEMPLATE_HYDE
+            item["Prompt Template for Model"] = template
+            item["Temperature"] = TEMPERATURE
+            item["token_count"] = token_count
+            item["file_type"] = file_type
+            item["model"] = model
+        output_data.extend(officer_data)
 
-    output_df = pd.DataFrame(output_data)
+    output_df = pd.DataFrame(output_data, columns=REQUIRED_COLUMNS)
     output_df.to_csv(csv_output_path, index=False)
 
 

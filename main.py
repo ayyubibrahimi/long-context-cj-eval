@@ -1,9 +1,7 @@
 import os
 import logging
 import pandas as pd
-from model.ner.src import process_query  # adjustable parameter
-# from model.allPages.src import process_query  # adjustable parameter
-# from model.allContext.src import process_query
+from model.allContext.src.src import process_query
 from ocr.src.ocr import ocr_process
 from evaluation.src.evaluation import (
     preprocess_data,
@@ -16,6 +14,9 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+def ocr_files_exist(output_path):
+    return os.path.exists(output_path) and len([f for f in os.listdir(output_path) if f.endswith('.json')]) > 0
+
 def main(
     input_path_transcripts,
     input_path_reports,
@@ -25,10 +26,16 @@ def main(
     groundtruth_directory,
     model,
 ):
-    # Process the PDF files using OCR
-    ocr_process(input_path_transcripts, input_path_reports, output_path_transcripts, output_path_reports)
+    # Check if OCR files already exist
+    if ocr_files_exist(output_path_transcripts) and ocr_files_exist(output_path_reports):
+        logging.info("OCR files already exist. Skipping OCR process.")
+    else:
+        # Process the PDF files using OCR
+        logging.info("Starting OCR process...")
+        ocr_process(input_path_transcripts, input_path_reports, output_path_transcripts, output_path_reports)
 
     # Process the OCR output files and generate LLM output
+    logging.info("Starting LLM processing...")
     process_query(
         output_path_transcripts,
         output_path_reports,
@@ -82,14 +89,19 @@ def main(
     results_df.to_csv(output_path, index=False)
     print(results_df)
 
+
 if __name__ == "__main__":
     input_path_transcripts = r"ocr/data/input/transcripts"
     input_path_reports = r"ocr/data/input/reports"
     output_path_transcripts = r"ocr/data/output/transcripts"
     output_path_reports = r"ocr/data/output/reports"
-    llm_output_directory = r"model/data/ner-20-pages"  # adjustable parameter
+    
+    # Ensure the LLM output directory is based on the model name and create it if it doesn't exist
+    model = "claude-3-5-sonnet-20240620"  # adjustable parameter
+    llm_output_directory = os.path.join(f"model/allContext/data/output/{model}")
+    os.makedirs(llm_output_directory, exist_ok=True)
+
     groundtruth_directory = "evaluation/data/input"
-    model = "claude-3-sonnet-20240229"  # adjustable parameter
 
     main(
         input_path_transcripts,

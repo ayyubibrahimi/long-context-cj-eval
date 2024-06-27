@@ -2,6 +2,7 @@ langchain-core
 langchain-openai
 langchain-community
 langchain-anthropic
+langchain-together
 langchain
 tiktoken   
 dotenv
