@@ -125,8 +125,8 @@ def get_response_from_query(db, query, temperature, model):
         llm = ChatAnthropic(model_name=model, temperature=temperature)
     elif model == "claude-3-5-sonnet-20240620":
         llm = ChatAnthropic(model_name=model, temperature=temperature)
-    elif model == "Qwen/Qwen2-72B-Instruct":
-        llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "claude-3-haiku-20240307":
+        llm = ChatAnthropic(model_name=model, temperature=temperature)
     else:
         raise ValueError(f"Unsupported model: {model}")
 
