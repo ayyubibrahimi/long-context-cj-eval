@@ -4,6 +4,7 @@ import pandas as pd
 from model.allContext.src.src import process_query as process_query_allContext
 from model.allPages.src.src import process_query as process_query_allPages
 from model.ner.src.src import process_query as process_query_ner
+from model.Vision.src.src import process_query as process_query_vision
 from ocr.src.ocr import ocr_process
 from evaluation.src.evaluation import (
     preprocess_data,
@@ -28,24 +29,35 @@ def main(
     evaluation_output_directory,
     groundtruth_directory,
     model,
-    process_function
+    process_function,
+    process_type
 ):
-    # Check if OCR files already exist
-    if ocr_files_exist(output_path_transcripts) and ocr_files_exist(output_path_reports):
-        logging.info("OCR files already exist. Skipping OCR process.")
-    else:
-        # Process the PDF files using OCR
-        logging.info("Starting OCR process...")
-        ocr_process(input_path_transcripts, input_path_reports, output_path_transcripts, output_path_reports)
+    if process_type != "vision":
+        # Check if OCR files already exist
+        if ocr_files_exist(output_path_transcripts) and ocr_files_exist(output_path_reports):
+            logging.info("OCR files already exist. Skipping OCR process.")
+        else:
+            # Process the PDF files using OCR
+            logging.info("Starting OCR process...")
+            ocr_process(input_path_transcripts, input_path_reports, output_path_transcripts, output_path_reports)
 
-    # Process the OCR output files and generate LLM output
-    logging.info(f"Starting LLM processing with model: {model}...")
-    process_function(
-        output_path_transcripts,
-        output_path_reports,
-        llm_output_directory,
-        model
-    )
+        # Process the OCR output files and generate LLM output
+        logging.info(f"Starting LLM processing with model: {model}...")
+        process_function(
+            output_path_transcripts,
+            output_path_reports,
+            llm_output_directory,
+            model
+        )
+    else:
+        # For Vision model, process the original PDF files
+        logging.info(f"Starting Vision processing with model: {model}...")
+        process_function(
+            input_path_transcripts,
+            input_path_reports,
+            llm_output_directory,
+            model
+        )
 
     # Evaluate the LLM output
     logging.info("Starting evaluation...")
@@ -104,7 +116,8 @@ def process_models(models, process_type, process_function):
             evaluation_output_directory,
             groundtruth_directory,
             model,
-            process_function
+            process_function,
+            process_type
         )
         all_results.append(model_results)
 
@@ -130,11 +143,8 @@ if __name__ == "__main__":
     allContextModels = ["claude-3-5-sonnet-20240620", "claude-3-haiku-20240307", "claude-3-opus-20240229"]
     allPagesModels = ["claude-3-haiku-20240307", "mistralai/Mixtral-8x22B-Instruct-v0.1"]
     nerModels = ["claude-3-haiku-20240307", "mistralai/Mixtral-8x22B-Instruct-v0.1"]
-    
-    ### Mixtral-8x22B isn't working. Figure out why 
 
-    # allPagesModels = ["mistralai/Mixtral-8x22B", "meta-llama/Llama-3-70b-chat-hf", "Qwen/Qwen2-72B-Instruct"]
-    # nerModels = ["mistralai/Mixtral-8x22B", "meta-llama/Llama-3-70b-chat-hf", "Qwen/Qwen2-72B-Instruct"]
+    # visionModels = ["claude-3-haiku-20240307"]  # Only Haiku for vision processing
 
     # Process allContext models
     process_models(allContextModels, "allContext", process_query_allContext)
@@ -144,3 +154,6 @@ if __name__ == "__main__":
 
     # Process ner models
     process_models(nerModels, "ner", process_query_ner)
+
+    # Process vision models
+    # process_models(visionModels, "vision", process_query_vision)
