@@ -11,7 +11,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 from dotenv import find_dotenv, load_dotenv
 import tiktoken
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 from langchain_together import ChatTogether
 
 
@@ -127,10 +127,19 @@ def get_response_from_query(db, query, temperature, model):
 
     if model == "claude-3-haiku-20240307":
         llm = ChatAnthropic(model_name=model, temperature=temperature)
+    elif model == "claude-3-5-sonnet-20240620":
+        llm = ChatAnthropic(model_name=model, temperature=temperature)
     elif model == "mistralai/Mixtral-8x22B-Instruct-v0.1":
+        llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "mistralai/Mixtral-8x7B-Instruct-v0.1":
+        llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "meta-llama/Llama-3-8b-chat-hf":
+        llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "meta-llama/Llama-3-70b-chat-hf":
         llm = ChatTogether(model_name=model, temperature=temperature)
     else:
         raise ValueError(f"Unsupported model: {model}")
+    
     
 
     prompt_response = ChatPromptTemplate.from_template(template)
@@ -199,17 +208,15 @@ def process_file(args):
     output_df.to_csv(csv_output_path, index=False)
 
 
-
 def process_files(input_path, output_path, file_type, model):
-    file_args = [
-        (file_name, input_path, output_path, file_type, model)
-        for file_name in os.listdir(input_path)
-        if file_name.endswith(".json")
-    ]
-
-    with Pool() as pool:
-        pool.map(process_file, file_args)
-
+    file_list = [f for f in os.listdir(input_path) if f.endswith(".json")]
+    args_list = [(file_name, input_path, output_path, file_type, model) for file_name in file_list]
+    
+    # Use half of the available CPU cores, but at least 1
+    num_processes = max(1, cpu_count() // 4)
+    
+    with Pool(processes=num_processes) as pool:
+        pool.map(process_file, args_list)
 
 def process_query(input_path_transcripts, input_path_reports, output_path, model):
     process_files(input_path_transcripts, output_path, "transcript", model)

@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 from model.allContext.src.src import process_query as process_query_allContext
 from model.allPages.src.src import process_query as process_query_allPages
-from model.ner.src.src import process_query as process_query_ner
+from model.ner.src.src import process_query as process_query_ner_original
 from model.Vision.src.src import process_query as process_query_vision
 from ocr.src.ocr import ocr_process
 from evaluation.src.evaluation import (
@@ -16,6 +16,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+def process_query_ner(input_path_transcripts, input_path_reports, output_path, model, fraction=1.0):
+    return process_query_ner_original(input_path_transcripts, input_path_reports, output_path, model, fraction)
 
 def ocr_files_exist(output_path):
     return os.path.exists(output_path) and len([f for f in os.listdir(output_path) if f.endswith('.json')]) > 0
@@ -91,35 +94,59 @@ def main(
     results_df = pd.concat(results, ignore_index=True)
 
     # Save individual model results
-    os.makedirs(evaluation_output_directory, exist_ok=True)
     individual_output_path = os.path.join(evaluation_output_directory, f"results_{model}.csv")
+    os.makedirs(os.path.dirname(individual_output_path), exist_ok=True)
     results_df.to_csv(individual_output_path, index=False)
     logging.info(f"Results for model {model} saved to: {individual_output_path}")
 
     return results_df
 
-def process_models(models, process_type, process_function):
+def process_models(models, process_type, process_function, fractions=None):
     all_results = []
     for model in models:
         logging.info(f"Processing with model: {model}")
-        llm_output_directory = os.path.join(f"model/{process_type}/data/output/{model}")
-        evaluation_output_directory = os.path.join(f"evaluation/data/output/{process_type}/{model}")
-        os.makedirs(llm_output_directory, exist_ok=True)
-        os.makedirs(evaluation_output_directory, exist_ok=True)
+        
+        if process_type == "ner" and fractions:
+            for fraction in fractions:
+                fraction_str = f"{int(fraction * 100)}percent"
+                llm_output_directory = os.path.join(f"model/{process_type}/data/output/{model}_{fraction_str}")
+                evaluation_output_directory = os.path.join(f"evaluation/data/output/{process_type}/{model}_{fraction_str}")
+                os.makedirs(llm_output_directory, exist_ok=True)
+                os.makedirs(evaluation_output_directory, exist_ok=True)
 
-        model_results = main(
-            input_path_transcripts,
-            input_path_reports,
-            output_path_transcripts,
-            output_path_reports,
-            llm_output_directory,
-            evaluation_output_directory,
-            groundtruth_directory,
-            model,
-            process_function,
-            process_type
-        )
-        all_results.append(model_results)
+                model_results = main(
+                    input_path_transcripts,
+                    input_path_reports,
+                    output_path_transcripts,
+                    output_path_reports,
+                    llm_output_directory,
+                    evaluation_output_directory,
+                    groundtruth_directory,
+                    model,
+                    lambda *args: process_function(*args, fraction=fraction),
+                    process_type
+                )
+                model_results['fraction'] = fraction
+                all_results.append(model_results)
+        else:
+            llm_output_directory = os.path.join(f"model/{process_type}/data/output/{model}")
+            evaluation_output_directory = os.path.join(f"evaluation/data/output/{process_type}/{model}")
+            os.makedirs(llm_output_directory, exist_ok=True)
+            os.makedirs(evaluation_output_directory, exist_ok=True)
+
+            model_results = main(
+                input_path_transcripts,
+                input_path_reports,
+                output_path_transcripts,
+                output_path_reports,
+                llm_output_directory,
+                evaluation_output_directory,
+                groundtruth_directory,
+                model,
+                process_function,
+                process_type
+            )
+            all_results.append(model_results)
 
     # Combine results from all models
     combined_results = pd.concat(all_results, ignore_index=True)
@@ -141,10 +168,9 @@ if __name__ == "__main__":
 
     # Define models and processing types
     allContextModels = ["claude-3-5-sonnet-20240620", "claude-3-haiku-20240307", "claude-3-opus-20240229"]
-    allPagesModels = ["claude-3-haiku-20240307", "mistralai/Mixtral-8x22B-Instruct-v0.1"]
-    nerModels = ["claude-3-haiku-20240307", "mistralai/Mixtral-8x22B-Instruct-v0.1"]
-
-    # visionModels = ["claude-3-haiku-20240307"]  # Only Haiku for vision processing
+    allPagesModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620", "mistralai/Mixtral-8x22B-Instruct-v0.1", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
+    nerModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620",  "mistralai/Mixtral-8x22B-Instruct-v0.1", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
+    # visionModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620"]
 
     # Process allContext models
     process_models(allContextModels, "allContext", process_query_allContext)
@@ -152,8 +178,9 @@ if __name__ == "__main__":
     # Process allPages models
     process_models(allPagesModels, "allPages", process_query_allPages)
 
-    # Process ner models
-    process_models(nerModels, "ner", process_query_ner)
+    # Process ner models with different fractions
+    ner_fractions = [0.25, 0.5, 0.75]
+    process_models(nerModels, "ner", process_query_ner, fractions=ner_fractions)
 
     # Process vision models
     # process_models(visionModels, "vision", process_query_vision)

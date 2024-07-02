@@ -17,6 +17,8 @@ from dotenv import find_dotenv, load_dotenv
 from langchain.vectorstores.faiss import FAISS
 import tiktoken
 from langchain_together import ChatTogether
+import math 
+from multiprocessing import Pool, cpu_count
 
 load_dotenv(find_dotenv())
 
@@ -184,7 +186,7 @@ def metadata_func(record: dict, metadata: dict) -> dict:
     return metadata
 
 
-def preprocess_document(file_path, embeddings):
+def preprocess_document(file_path, fraction=1.0):
     logger.info(f"Processing document: {file_path}")
     loader = JSONLoader(
         file_path,
@@ -202,44 +204,38 @@ def preprocess_document(file_path, embeddings):
 
     for page in text:
         doc = nlp(page.page_content)
-        entities = []
-        for ent in doc.ents:
-            if ent.label_ == "PERSON":
-                for title in law_enforcement_titles:
-                    if (
-                        title
-                        in page.page_content[
-                            max(0, ent.start_char - 100) : ent.end_char + 100
-                        ].lower()
-                    ):
-                        entities.append(ent.text)
-                        break
+        entities = [ent.text for ent in doc.ents if ent.label_ == "PERSON" and any(title in page.page_content[max(0, ent.start_char - 100) : ent.end_char + 100].lower() for title in law_enforcement_titles)]
         page_entities.append((page, len(entities)))
         token_count += len(enc.encode(page.page_content))
 
+    # Sort pages by number of entities, from most to least
     page_entities.sort(key=lambda x: x[1], reverse=True)
+    
+    # Calculate MAX_PAGES based on fraction
+    total_pages = len(page_entities)
+    MAX_PAGES = math.ceil(total_pages * fraction)
+    
+    # Select the top MAX_PAGES with the most entities
     selected_pages = [page for page, _ in page_entities[:MAX_PAGES]]
 
-    if selected_pages:
-        db = FAISS.from_documents(selected_pages, embeddings)
-    else:
-        db = None
+    return selected_pages, token_count, MAX_PAGES
 
-    return db, token_count
-
-
-def get_response_from_query(db, query, temperature, k, model):
+def get_response_from_query(docs, query, temperature, model):
     logger.info("Performing query...")
-    if db is None:
+    if not docs:
         return "", []
-    doc_list = db.similarity_search_with_score(query, k=k)
-    if not doc_list:
-        return "", []
-    docs = sort_retrived_documents(doc_list)
-
+    
     if model == "claude-3-haiku-20240307":
         llm = ChatAnthropic(model_name=model, temperature=temperature)
+    elif model == "claude-3-5-sonnet-20240620":
+        llm = ChatAnthropic(model_name=model, temperature=temperature)
     elif model == "mistralai/Mixtral-8x22B-Instruct-v0.1":
+        llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "mistralai/Mixtral-8x7B-Instruct-v0.1":
+        llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "meta-llama/Llama-3-8b-chat-hf":
+        llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "meta-llama/Llama-3-70b-chat-hf":
         llm = ChatTogether(model_name=model, temperature=temperature)
     else:
         raise ValueError(f"Unsupported model: {model}")
@@ -251,10 +247,11 @@ def get_response_from_query(db, query, temperature, k, model):
     page_numbers = []
 
     for doc in docs:
-        page_content = doc[0].page_content.replace("\n", " ")
-        page_number = doc[0].metadata.get("page_number")
+        page_content = doc.page_content.replace("\n", " ")
+        page_number = doc.metadata.get("page_number")
         if page_content:
             response = response_chain.invoke({"question": query, "docs": page_content})
+            print(response)
             responses.append(response)
         else:
             responses.append("")
@@ -264,7 +261,8 @@ def get_response_from_query(db, query, temperature, k, model):
     return concatenated_responses, page_numbers, model
 
 
-def process_file(file_name, input_path, output_path, file_type, embeddings, model):
+def process_file(args):
+    file_name, input_path, output_path, file_type, model, fraction = args
     csv_output_path = os.path.join(output_path, f"{file_name}.csv")
     if os.path.exists(csv_output_path):
         logger.info(f"CSV output for {file_name} already exists. Skipping...")
@@ -273,13 +271,14 @@ def process_file(file_name, input_path, output_path, file_type, embeddings, mode
     file_path = os.path.join(input_path, file_name)
     output_data = []
 
-    db, token_count = preprocess_document(file_path, embeddings)
+    docs, token_count, MAX_PAGES = preprocess_document(file_path, fraction)
+    
     for query in QUERY:
         retries = 0
         while retries < MAX_RETRIES:
             try:
                 officer_data_string, page_numbers, _ = get_response_from_query(
-                    db, query, TEMPERATURE, K, model
+                    docs, query, TEMPERATURE, model
                 )
                 break
             except ValueError as e:
@@ -317,20 +316,19 @@ def process_file(file_name, input_path, output_path, file_type, embeddings, mode
                 item["model"] = model
             output_data.extend(officer_data)
 
-        output_df = pd.DataFrame(output_data, columns=REQUIRED_COLUMNS)
-        output_df.to_csv(csv_output_path, index=False)
+    output_df = pd.DataFrame(output_data, columns=REQUIRED_COLUMNS)
+    output_df.to_csv(csv_output_path, index=False)
 
+def process_files(input_path, output_path, file_type, model, fraction=1.0):
+    file_list = [f for f in os.listdir(input_path) if f.endswith(".json")]
+    args_list = [(file_name, input_path, output_path, file_type, model, fraction) for file_name in file_list]
+    
+    # Use half of the available CPU cores, but at least 1
+    num_processes = max(1, cpu_count() // 4)
+    
+    with Pool(processes=num_processes) as pool:
+        pool.map(process_file, args_list)
 
-
-def process_files(input_path, output_path, file_type, embeddings, model):
-    for file_name in os.listdir(input_path):
-        if file_name.endswith(".json"):
-            process_file(
-                file_name, input_path, output_path, file_type, embeddings, model
-            )
-
-
-def process_query(input_path_transcripts, input_path_reports, output_path, model):
-    embeddings = generate_hypothetical_embeddings()
-    process_files(input_path_transcripts, output_path, "transcript", embeddings, model)
-    process_files(input_path_reports, output_path, "report", embeddings, model)
+def process_query(input_path_transcripts, input_path_reports, output_path, model, fraction=1.0):
+    process_files(input_path_transcripts, output_path, "transcript", model, fraction)
+    process_files(input_path_reports, output_path, "report", model, fraction)
