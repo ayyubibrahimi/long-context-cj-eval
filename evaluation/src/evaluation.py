@@ -9,65 +9,45 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+# Consolidate titles to handle variations with and without periods
 title_patterns = [
-    r"\bLt\.\b",
-    r"\bLes\.\b",
-    r"\bDet\.\b",
-    r"\bSat\.\b",
-    r"\bCet\.\b",
+    r"\bLt\.?\b",
+    r"\bLes\.?\b",
+    r"\bDet\.?\b",
+    r"\bSat\.?\b",
+    r"\bCet\.?\b",
     r"\bDetective\b",
     r"\bDetectives\b",
     r"\bOfficer\b",
     r"\bOfficers\b",
-    r"\bSgt\.\b",
+    r"\bSgt\.?\b",
     r"\bLieutenant\b",
     r"\bSergeant\b",
     r"\bCaptain\b",
     r"\bCorporal\b",
     r"\bDeputy\b",
-    r"\bOfc\.\b",
+    r"\bOfc\.?\b",
     r"\b\(?Technician\)?\b",
     r"\b\(?Criminalist\)?\b",
     r"\b\(?Photographer\)?\b",
     r"\bPolice Officer\b",
     r"\bCrime Lab Technician\b",
-    r"\bLt\.\b",
-    r"\bLes\.\b",
-    r"\bDet\.\b",
-    r"\bSat\.\b",
-    r"\bCet\.\b",
-    r"\bDetective\b",
-    r"\bDetectives\b",
-    r"\bOfficer\b",
-    r"\bSgt\.\b",
-    r"\bLieutenant\b",
-    r"\bSergeant\b",
-    r"\bCaptain\b",
-    r"\bCorporal\b",
-    r"\bDeputy\b",
-    r"\bOfc\.\b",
-    r"\b\(?Technician\)?\b",
-    r"\b\(?Criminalist\)?\b",
-    r"\b\(?Photographer\)?\b",
-    r"\bPolice Officer\b",
     r"\bUNIT \d+\b",
     r"\bMOUNTED OFFICERS\b",
-    r"\bCrime Lab Technician\b",
     r"Officer Context:",
-    r"P/O",
-    r"Police",
-    r"^De",
-    r"^L",
-    r"^SG",
-    r"^p\.o\.t\b",
-    r"^investigator\b",
-    r"^coroners\b",
-    r"^crime lab\b",
-    r"^dr\.\b",
-    r"^emergency medical technicians\b",
+    r"\bP/O\b",
+    r"\bP\.O\.?\b",
+    r"\bPolice\b",
+    r"\bDr\.?\b",
+    r"\bInvestigator\b",
+    r"\bCoroners\b",
+    r"\bCrime Lab\b",
+    r"\bEmergency Medical Technicians\b",
     r"#(\w+)\b",
 ]
 
+# Compile regex patterns for efficiency
+compiled_patterns = [re.compile(pattern, flags=re.IGNORECASE) for pattern in title_patterns]
 
 def split_consolidated_names(name):
     if isinstance(name, str):
@@ -75,37 +55,33 @@ def split_consolidated_names(name):
     else:
         return ""
 
-
-def clean_llm_output_officer_names(df, title_patterns):
+def clean_llm_output_officer_names(df, compiled_patterns):
     logging.info("Cleaning LLM output officer names...")
     
     # Ensure all values in "Officer Name" column are strings
-    df["Officer Name"] = df["Officer Name"].astype(str).fillna("")
+    df["Officer Name"] = df["Officer Name"].astype(str).fillna("").str.lower()
     
-    for pattern in title_patterns:
-        df["Officer Name"] = (
-            df["Officer Name"]
-            .str.replace(pattern, "", flags=re.IGNORECASE, regex=True)
-            .str.strip()
-            .apply(split_consolidated_names)
-            .str.lower()
-        )
+    for pattern in compiled_patterns:
+        df["Officer Name"] = df["Officer Name"].apply(lambda x: pattern.sub("", x).strip())
+    
+    # Apply split_consolidated_names and additional cleaning for periods and whitespace
+    df["Officer Name"] = df["Officer Name"].apply(split_consolidated_names)
+    df["Officer Name"] = df["Officer Name"].str.replace(r'^[\s.]+|[\s.]+$', '', regex=True)
+    
     return df
 
-def clean_groundtruth_officer_names(df, title_patterns):
+def clean_groundtruth_officer_names(df, compiled_patterns):
     logging.info("Cleaning groundtruth officer names...")
-    df["Officer Names to Match"] = df["Officer Names to Match"].astype(str)
-    for pattern in title_patterns:
-        df["Officer Names to Match"] = (
-            df["Officer Names to Match"]
-            .str.replace(pattern, "", flags=re.IGNORECASE, regex=True)
-            .str.strip()
-            .fillna("")
-            .apply(split_consolidated_names)
-            .str.lower()
-        )
+    df["Officer Names to Match"] = df["Officer Names to Match"].astype(str).fillna("").str.lower()
+    
+    for pattern in compiled_patterns:
+        df["Officer Names to Match"] = df["Officer Names to Match"].apply(lambda x: pattern.sub("", x).strip())
+    
+    # Apply split_consolidated_names and additional cleaning for periods and whitespace
+    df["Officer Names to Match"] = df["Officer Names to Match"].apply(split_consolidated_names)
+    df["Officer Names to Match"] = df["Officer Names to Match"].str.replace(r'^[\s.]+|[\s.]+$', '', regex=True)
+    
     return df
-
 
 def preprocess_data(llm_output_path, groundtruth_path, title_patterns):
     logging.info(
@@ -129,12 +105,10 @@ def preprocess_data(llm_output_path, groundtruth_path, title_patterns):
         logging.warning(f"The groundtruth file {groundtruth_path} is empty. Creating default DataFrame.")
         groundtruth_df = pd.DataFrame(columns=["Officer Names to Match"])
 
-    llm_output_df = clean_llm_output_officer_names(llm_output_df, title_patterns)
-    groundtruth_df = clean_groundtruth_officer_names(groundtruth_df, title_patterns)
+    llm_output_df = clean_llm_output_officer_names(llm_output_df, compiled_patterns)
+    groundtruth_df = clean_groundtruth_officer_names(groundtruth_df, compiled_patterns)
 
     return llm_output_df, groundtruth_df
-
-
 def compute_jaro_winkler_metrics(llm_output_df, groundtruth_df, threshold=0.8):
     logging.info("Computing Jaro-Winkler metrics...")
     results = []

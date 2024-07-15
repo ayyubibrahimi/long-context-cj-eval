@@ -37,6 +37,7 @@ def encode_image(image):
     image.save(buffered, format="PNG")
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+
 def classify_page(chat, base64_image, page_number):
     prompt = """
     As an AI assistant, your task is to identify and provide information about law enforcement personnel mentioned in the image. Please follow these guidelines:
@@ -45,14 +46,10 @@ def classify_page(chat, base64_image, page_number):
 
     2. For each identified individual, provide:
        - Their name (prefixed with "Officer Name: ")
-       - The context of their mention (prefixed with "Officer Context: ")
-       - Their role, if discernible (prefixed with "Officer Role: ")
 
     3. Format the response as follows:
 
     Officer Name: [Name]
-    Officer Context: [Detailed description of their mention, including key events, decisions, actions, interactions, responsibilities, and any significant outcomes or incidents they were involved in]
-    Officer Role: [Specific role, e.g., Lead Detective (Homicide Division), Supervising Officer (Crime Lab), Detective, Officer on Scene, Arresting Officer, Crime Lab Analyst]
 
     Important notes:
     - Do not use numbered or lettered prefixes in your response.
@@ -81,6 +78,51 @@ def classify_page(chat, base64_image, page_number):
         return msg.content.strip(), page_number
     except Exception as e:
         return f"Error classifying page: {str(e)}", page_number
+
+# def classify_page(chat, base64_image, page_number):
+#     prompt = """
+#     As an AI assistant, your task is to identify and provide information about law enforcement personnel mentioned in the image. Please follow these guidelines:
+
+#     1. Identify individuals by their names and specific law enforcement titles (e.g., officer, sergeant, lieutenant, captain, commander, sheriff, deputy, detective, inspector, technician, analyst, det., sgt., lt., cpt., p.o., ofc., coroner).
+
+#     2. For each identified individual, provide:
+#        - Their name (prefixed with "Officer Name: ")
+#        - The context of their mention (prefixed with "Officer Context: ")
+#        - Their role, if discernible (prefixed with "Officer Role: ")
+
+#     3. Format the response as follows:
+
+#     Officer Name: [Name]
+#     Officer Context: [Detailed description of their mention, including key events, decisions, actions, interactions, responsibilities, and any significant outcomes or incidents they were involved in]
+#     Officer Role: [Specific role, e.g., Lead Detective (Homicide Division), Supervising Officer (Crime Lab), Detective, Officer on Scene, Arresting Officer, Crime Lab Analyst]
+
+#     Important notes:
+#     - Do not use numbered or lettered prefixes in your response.
+#     - Only include information directly stated in the police report image.
+#     - If an individual's context is unclear, note this fact.
+#     - Do not extract or include information about victims or witnesses.
+#     - If no law enforcement personnel are identified in the image, state this fact clearly.
+
+#     Please analyze the provided image and respond according to these guidelines.
+#     """
+
+#     try:
+#         msg = chat.invoke(
+#             [
+#                 HumanMessage(
+#                     content=[
+#                         {"type": "text", "text": prompt},
+#                         {
+#                             "type": "image_url",
+#                             "image_url": {"url": f"data:image/png;base64,{base64_image}"},
+#                         },
+#                     ]
+#                 )
+#             ]
+#         )
+#         return msg.content.strip(), page_number
+#     except Exception as e:
+#         return f"Error classifying page: {str(e)}", page_number
 
 def extract_officer_data(response):
     officers = []

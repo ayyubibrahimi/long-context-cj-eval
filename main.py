@@ -78,7 +78,7 @@ def main(
                 llm_output_df, groundtruth_df = preprocess_data(
                     llm_output_path,
                     groundtruth_path,
-                    title_patterns
+                    title_patterns,
                 )
                 file_results = compute_jaro_winkler_metrics(
                     llm_output_df,
@@ -167,20 +167,20 @@ if __name__ == "__main__":
     groundtruth_directory = "evaluation/data/input"
 
     # Define models and processing types
-    allContextModels = ["claude-3-5-sonnet-20240620", "claude-3-haiku-20240307", "claude-3-opus-20240229"]
-    allPagesModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620", "mistralai/Mixtral-8x22B-Instruct-v0.1", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
-    nerModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620",  "mistralai/Mixtral-8x22B-Instruct-v0.1", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
-    # visionModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620"]
+    # allContextModels = ["claude-3-5-sonnet-20240620", "claude-3-haiku-20240307", "claude-3-opus-20240229"]
+    # allPagesModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620", "mistralai/Mixtral-8x22B-Instruct-v0.1", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
+    # nerModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620",  "mistralai/Mixtral-8x22B-Instruct-v0.1", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
+    visionModels = ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620"]
 
-    # Process allContext models
-    process_models(allContextModels, "allContext", process_query_allContext)
+    # # Process allContext models
+    # process_models(allContextModels, "allContext", process_query_allContext)
 
-    # Process allPages models
-    process_models(allPagesModels, "allPages", process_query_allPages)
+    # # Process allPages models
+    # process_models(allPagesModels, "allPages", process_query_allPages)
 
-    # Process ner models with different fractions
-    ner_fractions = [0.25, 0.5, 0.75]
-    process_models(nerModels, "ner", process_query_ner, fractions=ner_fractions)
+    # # Process ner models with different fractions
+    # ner_fractions = [0.25, 0.5, 0.75]
+    # process_models(nerModels, "ner", process_query_ner, fractions=ner_fractions)
 
     # Process vision models
-    # process_models(visionModels, "vision", process_query_vision)
+    process_models(visionModels, "vision", process_query_vision)
