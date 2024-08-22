@@ -13,6 +13,7 @@ from dotenv import find_dotenv, load_dotenv
 import tiktoken
 from multiprocessing import Pool, cpu_count
 from langchain_together import ChatTogether
+from langchain_mistralai import ChatMistralAI
 
 
 load_dotenv(find_dotenv())
@@ -31,13 +32,16 @@ ITERATION_TIMES = 1
 MAX_RETRIES = 10
 
 
+
 REQUIRED_COLUMNS = [
-    "Officer Name", "page_number", "fn", "Query", 
+    "Officer Name", "Officer Role", "Officer Context", "page_number", "fn", "Query", 
     "Prompt Template for Hyde", "Prompt Template for Model", 
     "Temperature", "token_count", "file_type", "model"
 ]
 DEFAULT_VALUES = {
     "Officer Name": "",
+    "Officer Role": "",
+    "Officer Context": "",
     "page_number": [],
     "fn": "",
     "Query": "",
@@ -48,6 +52,7 @@ DEFAULT_VALUES = {
     "file_type": "",
     "model": ""
 }
+
 
 
 template = """
@@ -85,7 +90,6 @@ template = """
     - Do not include any prefixes
     - Only derive responses from factual information found within the police reports.
     - If the context of an identified person's mention is not clear in the report, provide their name and note that the context is not specified.
-    - Do not extract information about victims and witnesses
     """
 
 
@@ -137,6 +141,8 @@ def get_response_from_query(db, query, temperature, model):
         llm = ChatTogether(model_name=model, temperature=temperature)
     elif model == "meta-llama/Llama-3-70b-chat-hf":
         llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "open-mistral-nemo":
+        llm = ChatMistralAI(model_name=model, temperature=temperature)
     else:
         raise ValueError(f"Unsupported model: {model}")
     

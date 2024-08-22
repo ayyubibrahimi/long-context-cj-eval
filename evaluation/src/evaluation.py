@@ -108,11 +108,14 @@ def preprocess_data(llm_output_path, groundtruth_path, title_patterns):
     llm_output_df = clean_llm_output_officer_names(llm_output_df, compiled_patterns)
     groundtruth_df = clean_groundtruth_officer_names(groundtruth_df, compiled_patterns)
 
+
     return llm_output_df, groundtruth_df
+
 def compute_jaro_winkler_metrics(llm_output_df, groundtruth_df, threshold=0.8):
     logging.info("Computing Jaro-Winkler metrics...")
     results = []
     matched_names = set()
+    false_positive_names = set()
 
     # Get unique officer names from LLM output and groundtruth dataframes
     llm_output_names = llm_output_df["Officer Name"].unique()
@@ -134,11 +137,13 @@ def compute_jaro_winkler_metrics(llm_output_df, groundtruth_df, threshold=0.8):
         # If the best match similarity is above the threshold, consider it a match
         if best_match[1] > threshold:
             matched_names.add(best_match[0])
+        else:
+            false_positive_names.add(name)
 
     # Calculate true positives (matched names that exist in groundtruth)
     true_positives = len(matched_names.intersection(set(groundtruth_names.tolist())))
-    # Calculate false positives (matched names that don't exist in groundtruth)
-    false_positives = len(matched_names - set(groundtruth_names.tolist()))
+    # Calculate false positives (names in LLM output that don't exist in groundtruth)
+    false_positives = len(false_positive_names)
 
     # Calculate precision (true positives / (true positives + false positives))
     precision = (

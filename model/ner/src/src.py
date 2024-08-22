@@ -19,6 +19,7 @@ import tiktoken
 from langchain_together import ChatTogether
 import math 
 from multiprocessing import Pool, cpu_count
+from langchain_mistralai import ChatMistralAI
 
 load_dotenv(find_dotenv())
 
@@ -237,6 +238,8 @@ def get_response_from_query(docs, query, temperature, model):
         llm = ChatTogether(model_name=model, temperature=temperature)
     elif model == "meta-llama/Llama-3-70b-chat-hf":
         llm = ChatTogether(model_name=model, temperature=temperature)
+    elif model == "open-mistral-nemo":
+        llm = ChatMistralAI(model_name=model, temperature=temperature)
     else:
         raise ValueError(f"Unsupported model: {model}")
     

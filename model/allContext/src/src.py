@@ -12,6 +12,8 @@ from dotenv import find_dotenv, load_dotenv
 import tiktoken
 from multiprocessing import Pool
 from langchain_together import ChatTogether
+from langchain_mistralai import ChatMistralAI
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 load_dotenv(find_dotenv())
 
@@ -29,12 +31,14 @@ MAX_RETRIES = 10
 
 
 REQUIRED_COLUMNS = [
-    "Officer Name", "page_number", "fn", "Query", 
+    "Officer Name", "Officer Role", "Officer Context", "page_number", "fn", "Query", 
     "Prompt Template for Hyde", "Prompt Template for Model", 
     "Temperature", "token_count", "file_type", "model"
 ]
 DEFAULT_VALUES = {
     "Officer Name": "",
+    "Officer Role": "",
+    "Officer Context": "",
     "page_number": [],
     "fn": "",
     "Query": "",
@@ -118,8 +122,7 @@ def preprocess_document(file_path):
 def get_response_from_query(db, query, temperature, model):
     logger.info("Performing query...")
     if db is None:
-        return "", []
-    docs = db
+        return "", [], model
 
     if model == "claude-3-opus-20240229":
         llm = ChatAnthropic(model_name=model, temperature=temperature)
@@ -127,26 +130,43 @@ def get_response_from_query(db, query, temperature, model):
         llm = ChatAnthropic(model_name=model, temperature=temperature)
     elif model == "claude-3-haiku-20240307":
         llm = ChatAnthropic(model_name=model, temperature=temperature)
+    elif model == "open-mistral-nemo":
+        llm = ChatMistralAI(model_name=model, temperature=temperature)
     else:
         raise ValueError(f"Unsupported model: {model}")
 
-
     prompt_response = ChatPromptTemplate.from_template(template)
     response_chain = prompt_response | llm | StrOutputParser()
-    responses = []
-    page_numbers = []
 
     # Concatenate all documents to leverage the full context window
-    concatenated_docs = " ".join(doc.page_content.replace("\n", " ") for doc in docs)
-    page_numbers = [doc.metadata.get("page_number") for doc in docs]
+    concatenated_docs = " ".join(doc.page_content.replace("\n", " ") for doc in db)
+    page_numbers = [doc.metadata.get("page_number") for doc in db]
 
-    response = response_chain.invoke({"question": query, "docs": concatenated_docs})
-    responses.append(response)
-    logger.info(f"Response received: {response}")
+    @retry(stop=stop_after_attempt(5), wait=wait_random_exponential(min=1, max=60))
+    def try_get_response(docs):
+        try:
+            return response_chain.invoke({"question": query, "docs": docs})
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 400 and "client_body_buffer_size" in str(e):
+                # Reduce input size by approximately 50 tokens
+                tokens = tiktoken.encoding_for_model("gpt-3.5-turbo").encode(docs)
+                if len(tokens) > 50:
+                    reduced_tokens = tokens[:-50]
+                    reduced_docs = tiktoken.encoding_for_model("gpt-3.5-turbo").decode(reduced_tokens)
+                    logger.info(f"Reducing input size by 50 tokens. New size: {len(reduced_tokens)}")
+                    return try_get_response(reduced_docs)
+                else:
+                    raise ValueError("Input is too small to be reduced further")
+            else:
+                raise
 
-    concatenated_responses = "\n\n".join(responses)
-    logger.info(f"Concatenated responses: {concatenated_responses}")
-    return concatenated_responses, page_numbers, model
+    try:
+        response = try_get_response(concatenated_docs)
+        logger.info(f"Response received: {response}")
+        return response, page_numbers, model
+    except Exception as e:
+        logger.error(f"Error in get_response_from_query: {e}")
+        return str(e), page_numbers, model
 
 
 def process_file(args):
@@ -195,16 +215,25 @@ def process_file(args):
     output_df.to_csv(csv_output_path, index=False)
 
 
+# def process_files(input_path, output_path, file_type, model):
+#     file_args = [
+#         (file_name, input_path, output_path, file_type, model)
+#         for file_name in os.listdir(input_path)
+#         if file_name.endswith(".json")
+#     ]
+
+#     with Pool() as pool:
+#         pool.map(process_file, file_args)
+
+
+# def process_query(input_path_transcripts, input_path_reports, output_path, model):
+#     process_files(input_path_transcripts, output_path, "transcript", model)
+#     process_files(input_path_reports, output_path, "report", model)
+
 def process_files(input_path, output_path, file_type, model):
-    file_args = [
-        (file_name, input_path, output_path, file_type, model)
-        for file_name in os.listdir(input_path)
-        if file_name.endswith(".json")
-    ]
-
-    with Pool() as pool:
-        pool.map(process_file, file_args)
-
+    for file_name in os.listdir(input_path):
+        if file_name.endswith(".json"):
+            process_file((file_name, input_path, output_path, file_type, model))
 
 def process_query(input_path_transcripts, input_path_reports, output_path, model):
     process_files(input_path_transcripts, output_path, "transcript", model)
