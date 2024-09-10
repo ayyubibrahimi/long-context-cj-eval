@@ -36,21 +36,21 @@ def generate_hypothetical_embeddings():
     )
     return embeddings
 
-
 def clean_name(officer_name):
     return re.sub(
-        r"(Detective|Officer|[Dd]et\.|[Ss]gt\.|[Ll]t\.|[Cc]pt\.|[Oo]fc\.|Deputy|Captain|[CcPpLl]|Sergeant|Lieutenant|Techn?i?c?i?a?n?|Investigator|^-|\d{1}\)|\w{1}\.)\.?\s+",
+        r"^(Detective|Det\.?|Officer|[Dd]et\.|[Ss]gt\.|[Ll]t\.|[Cc]pt\.|[Oo]fc\.|Deputy|Captain|[CcPpLl]|Sergeant|Lieutenant|Techn?i?c?i?a?n?|Investigator|^-|\d{1}\)|\w{1}\.)\.?\s+",
         "",
         officer_name,
     )
 
-
 def extract_officer_data(text):
     officer_data = []
 
-    normalized_text = re.sub(r"\s*-\s*", "", text)
+    # Normalize the text by removing any leading/trailing whitespace and extra newlines
+    normalized_text = re.sub(r'\s+', ' ', text.strip())
 
-    officer_sections = re.split(r"\n(?=Officer Name:)", normalized_text)
+    # Split the text into officer sections
+    officer_sections = re.split(r'(?=Officer Name:)', normalized_text)
 
     for section in officer_sections:
         if not section.strip():
@@ -58,20 +58,20 @@ def extract_officer_data(text):
 
         officer_dict = {}
 
-        name_match = re.search(
-            r"Officer Name:\s*(.*?)\s*Officer Context:", section, re.DOTALL
-        )
-        context_match = re.search(
-            r"Officer Context:\s*(.*?)\s*Officer Role:", section, re.DOTALL
-        )
-        role_match = re.search(r"Officer Role:\s*(.*)", section, re.DOTALL)
+        # Extract Officer Name
+        name_match = re.search(r'Officer Name:\s*(.*?)(?=\s*Officer (Context|Role):|$)', section, re.DOTALL | re.IGNORECASE)
+        if name_match:
+            officer_dict['Officer Name'] = clean_name(name_match.group(1).strip())
 
-        if name_match and name_match.group(1):
-            officer_dict["Officer Name"] = clean_name(name_match.group(1).strip())
-        if context_match and context_match.group(1):
-            officer_dict["Officer Context"] = context_match.group(1).strip()
-        if role_match and role_match.group(1):
-            officer_dict["Officer Role"] = role_match.group(1).strip()
+        # Extract Officer Context
+        context_match = re.search(r'Officer Context:\s*(.*?)(?=\s*Officer Role:|$)', section, re.DOTALL | re.IGNORECASE)
+        if context_match:
+            officer_dict['Officer Context'] = context_match.group(1).strip()
+
+        # Extract Officer Role
+        role_match = re.search(r'Officer Role:\s*(.*?)(?=\s*Officer Name:|$)', section, re.DOTALL | re.IGNORECASE)
+        if role_match:
+            officer_dict['Officer Role'] = role_match.group(1).strip()
 
         if officer_dict:
             officer_data.append(officer_dict)
